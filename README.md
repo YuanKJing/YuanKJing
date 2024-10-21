@@ -13,7 +13,7 @@
 <!--Start Intro-->
 
 <p align="left">
-My name is Junqi Jing (Chinese: 荆浚淇).I am an undergraduate student at Harbin Institute of Technology. I have also done a research internship and visited students in Milab Donglin Wang’s ENCODE Lab(WestLake University) before.
+My name is Junqi Jing (Chinese: 荆浚淇).I am an undergraduate student at Harbin Institute of Technology. I have also done a research internship and visited students in  Donglin Wang’s Milab(WestLake University) before.
 
 I am broadly interested in various software development technology and Genrated Embodied AI/LLM.
 
@@ -89,37 +89,6 @@ If you are interested in me, please contact me.</p>
 
 <h2 align="center">📊 Gɪᴛʜᴜʙ Sᴛᴀᴛs 📊</h2>
 
-<table width="100%">
-  <tr>
-    <td width="50%">
-      <h3 align="center"><strong>GitHub Stats</strong></h3>
-      <p align="center">
-        <a href="https://github.com/YuanKJing">
-          <img align="center" src="https://github-readme-stats.vercel.app/api?username=WiserZhou&count_private=true&show_icons=true&theme=nightowl&bg_color=0,000000,441350&title_color=c56a90&text_color=ffffff&rank_icon=github&hide=prs,issues,contribs&show=reviews,prs_merged,prs_merged_percentage" alt="GitHub Stats" />
-        </a>
-      </p>
-    </td>
-    <td width="50%">
-      <h3 align="center"><strong>Streak Stats</strong></h3>
-      <p align="center">
-        <a href="https://github.com/YuanKJing">
-          <img align="center" src="https://streak-stats.demolab.com?user=WiserZhou&theme=nightowl&background=0,000000,441350&fire=ffeb95&ring=ffeb95&sideNums=ffffff&sideLabels=ffffff&dates=c56a90&currStreakNum=ffffff" alt="Streak Stats" />
-        </a>
-      </p>
-    </td>
-  </tr>
-  <tr>
-    <td width="50%">
-      <h3 align="center"><strong>Top Contributions</strong></h3>
-      <p align="center">
-        <a href="https://github.com/YuanKJing">
-          <img align="center" src="https://github-contributor-stats.vercel.app/api?username=WiserZhou&limit=3&theme=nightowl&show_owner=true&combine_all_yearly_contributions=false&bg_color=0,000000,441350&title_color=c56a90&text_color=ffffff" alt="Top Contributions" />
-        </a>
-      </p>
-    </td>
-  </tr>
-</table>
-<br />
 
 <!--Contribution Graph-->
 
@@ -146,8 +115,8 @@ If you are interested in me, please contact me.</p>
 <h2 align="center">🤝 Cᴏɴɴᴇᴄᴛ Wɪᴛʜ Mᴇ 🤝 </h2>
 <div align="center">
 
-<a href="mailto:wiserzyf@gmail.com" target="_blank">
-<img src="./gmail.png" width=50 height=50 alt="wiserzyf@gmail.com" style="margin-bottom: 5px;" />
+<a href="2023210913@stu.hit.edu.cn" target="_blank">
+<img src="./gmail.png" width=50 height=50 alt="2023210913@stu.hit.edu.cn" style="margin-bottom: 5px;" />
 </a>
 
 <!-- <a href="https://x.com/kiran__a__n" target="_blank">
