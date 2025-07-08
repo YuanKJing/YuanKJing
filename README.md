@@ -23,7 +23,7 @@ If you are interested in me, please contact me.</p>
 - 🌱 I’m currently learning many things, I believe that everyday is a learning opportunity.
 - 💁‍♂️ I have participated in multiple competitions as a team and won awards.
 - ❤ Contributing to Open Source.
-- 💻 Visit my [Webpage](https://github.com/YuanKJing) for more details about me.
+- 💻 Visit my [Webpage](https://yuankjing.github.io/JunqiJing/) for more details about me.
   
   <!--End Intro-->
 
