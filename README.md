@@ -14,7 +14,7 @@
 
 <p align="left">
 My name is Junqi Jing (Chinese: 荆浚淇).I am an undergraduate student at Harbin Institute of Technology. I have also done a research internship and visited students in  Donglin Wang’s Milab(WestLake University) before.
-
+I am now serving as Exchange student in POSTECH in MLV lab(Pr.Kwang in kim).
 I am broadly interested in various software development technology and Genrated Embodied AI/LLM.
 
 If you are interested in me, please contact me.</p>
