@@ -72,7 +72,7 @@ If you are interested in my work, please feel free to contact me.
 
 <p align="center">
 
-[![trophy](https://github-profile-trophy.vercel.app/?username=YuanKJing&theme=tokyonight&no-frame=true&margin-w=15)](https://github.com/ryo-ma/github-profile-trophy)
+[![trophy](https://github-profile-trophy.vercel.app/?username=YuanKJing&theme=tokyonight&title=Commits,Repositories,Stars,Followers,Experience&row=1&column=5)](https://github.com/ryo-ma/github-profile-trophy)
 
 </p>
 
