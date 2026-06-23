@@ -13,18 +13,18 @@
 <!--Start Intro-->
 
 <p align="left">
-My name is Junqi Jing (Chinese: 荆浚淇).I am an undergraduate student at Harbin Institute of Technology. I have also done a research internship and visited students in  Donglin Wang’s Milab(WestLake University) before.
-I am now serving as Exchange student in POSTECH in MLV lab(Pr.Kwang in kim).
-I am broadly interested in various software development technology and Genrated Embodied AI/LLM.
+My name is <b>Junqi Jing</b> (Chinese: 荆浚淇). I am an undergraduate student in Software Engineering at <b>Harbin Institute of Technology</b>.
 
-If you are interested in me, please contact me.</p>
+I am currently an AI Research Intern at <b><a href="https://www.knowinai.com/">KNOWIN AI</a></b>, where I work on dexterous hand manipulation based on Vision-Language-Action (VLA) models and conduct exploratory research on <b>World Action Models (WAMs)</b>.
 
-- ✨ Student of life :)
-- 🌱 I’m currently learning many things, I believe that everyday is a learning opportunity.
-- 💁‍♂️ I have participated in multiple competitions as a team and won awards.
-- ❤ Contributing to Open Source.
-- 💻 Visit my [Webpage](https://yuankjing.github.io/JunqiJing/) for more details about me.
-  
+Previously, I spent one semester as an exchange student at <b>POSTECH</b>, conducting research in the <b><a href="https://sites.google.com/view/mlvlab/home?authuser=0">MLV Lab</a></b> under the supervision of <b><a href="https://sites.google.com/view/kimki">Prof. Kwang In Kim</a></b>. It was an unforgettable and inspiring research experience.
+
+After returning to China, I joined <b>Tsinghua University</b> as a visiting student for three months in the <b><a href="https://www.leaplab.ai/">LEAP Lab</a></b>, where I was fortunate to work under the guidance of <b><a href="https://gaohuang-net.github.io/">Prof. Gao Huang</a></b>.
+
+My research interests broadly lie in <b>World Models</b>, <b>Embodied AI</b>, and <b>Large Language Models (LLMs)</b>.
+
+If you are interested in my work, please feel free to contact me.
+
   <!--End Intro-->
 
 <!--Profile Count Badge-->
