@@ -68,11 +68,6 @@ If you are interested in my work, please feel free to contact me.
 
 ---
 
-<h2 align="center">🏆 GitHub Trophies</h2>
-
-<p align="center">
-
-[![trophy](https://github-profile-trophy.vercel.app/?username=YuanKJing&theme=tokyonight&title=Commits,Repositories,Stars,Followers,Experience&row=1&column=5)](https://github.com/ryo-ma/github-profile-trophy)
 
 </p>
 
