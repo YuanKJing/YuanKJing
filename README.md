@@ -72,7 +72,7 @@ If you are interested in my work, please feel free to contact me.
 
 <p align="center">
 
-<img src="https://github-profile-trophy.vercel.app/?username=YuanKJing&theme=algolia&no-frame=true&row=2&column=4"/>
+[![trophy](https://github-profile-trophy.vercel.app/?username=YuanKJing&theme=tokyonight&no-frame=true&margin-w=15)](https://github.com/ryo-ma/github-profile-trophy)
 
 </p>
 
@@ -114,16 +114,16 @@ If you are interested in my work, please feel free to contact me.
 
 <p align="center">
 
-<a href="mailto:xingkong8527@gmail.com">
-<img src="./gmail.png" width="50">
+<a href="mailto:2023210913@stu.hit.edu.cn">
+<img src="https://skillicons.dev/icons?i=gmail" />
 </a>
 
-<a href="https://www.linkedin.com/">
-<img src="./linkedin.png" width="50">
+<a href="https://www.linkedin.com/in/你的链接">
+<img src="https://skillicons.dev/icons?i=linkedin" />
 </a>
 
 <a href="https://yuankjing.github.io/JunqiJing/">
-<img src="./website.png" width="50">
+<img src="https://img.icons8.com/fluency/48/domain.png"/>
 </a>
 
 </p>
