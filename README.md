@@ -23,7 +23,8 @@ After returning to China, I joined <b>Tsinghua University</b> as a visiting stud
 
 My research interests broadly lie in <b>World Models</b>, <b>Embodied AI</b>, and <b>Large Language Models (LLMs)</b>.
 
-If you are interested in my work, please feel free to contact me.
+If you are interested in my work, please feel free to contact me. 
+- 💻 Visit my <a href="https://yuankjing.github.io/JunqiJing/">Homepage</a> for more details about my research.
 
   <!--End Intro-->
 
