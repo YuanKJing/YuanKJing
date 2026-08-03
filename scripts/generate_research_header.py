@@ -1,604 +1,578 @@
 #!/usr/bin/env python3
-"""Generate the theme-aware research field-log visual used by README.md.
-
-The visual is built from Junqi Jing's own public research materials: a formal
-portrait and real dual-arm teleoperation footage. The source URLs are pinned
-to a commit and verified before rendering.
-"""
+"""Generate the editorial research-map animations used by README.md."""
 
 from __future__ import annotations
 
-import base64
-import functools
-import hashlib
 import math
-import os
 import shutil
 import subprocess
 import tempfile
-import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
+FRAME_COUNT = 84
+FRAME_DELAY = 9
 
-SOURCE_COMMIT = "2d1cbd701efb22f2a8d074b1b82f22bb04d04cbf"
-SOURCE_ROOT = f"https://raw.githubusercontent.com/YuanKJing/JunqiJing/{SOURCE_COMMIT}"
-SOURCES = {
-    "portrait.jpg": (
-        f"{SOURCE_ROOT}/content/authors/admin/avatar.jpg",
-        "f2dcfd45c2d9baaaa79bcd3ed52e3eaf5dac3c2e46c158db4bc6dd4e845ecd8f",
-    ),
-    "teleoperation.mp4": (
-        f"{SOURCE_ROOT}/static/videos/teleoperation.mp4",
-        "f37131342022ab2d4159facabb485e5b4538d110e452debb9c3c6bd10f5af69c",
-    ),
-}
-
-FRAME_RATE = 5
-FRAME_COUNT = 24
-FRAME_DELAY = round(100 / FRAME_RATE)
-VIDEO_START_SECONDS = 7.5
-POSTER_SOURCE_FRAME = 15
-
-
-@dataclass(frozen=True)
-class Theme:
-    background: str
-    surface: str
-    surface_strong: str
-    border: str
-    grid: str
-    ink: str
-    muted: str
-    accent: str
-    image_overlay: str
-    image_overlay_opacity: float
-
-
-LIGHT = Theme(
-    background="#F8FAFC",
-    surface="#EEF3F7",
-    surface_strong="#E2EAF1",
-    border="#B8C5D1",
-    grid="#1E3A5F",
-    ink="#0F172A",
-    muted="#52647A",
-    accent="#A16207",
-    image_overlay="#1E3A5F",
-    image_overlay_opacity=0.04,
+FONT_CANDIDATES = (
+    Path("/System/Library/Fonts/Avenir Next.ttc"),
+    Path("/System/Library/Fonts/HelveticaNeue.ttc"),
+    Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    Path("/usr/share/fonts/TTF/DejaVuSans.ttf"),
 )
+FONT = next((candidate for candidate in FONT_CANDIDATES if candidate.exists()), None)
 
-DARK = Theme(
-    background="#08111B",
-    surface="#0E1B2A",
-    surface_strong="#14263A",
-    border="#31506F",
-    grid="#93A9BF",
-    ink="#E8EEF5",
-    muted="#9CB0C4",
-    accent="#D6A64A",
-    image_overlay="#07111C",
-    image_overlay_opacity=0.16,
-)
+PAPER = "#F3EFE6"
+PAPER_HIGHLIGHT = "#FAF7F0"
+INK = "#153244"
+SECONDARY = "#49636E"
+HAIRLINE = "#AAB8B4"
+CYAN = "#5D9094"
+CYAN_LIGHT = "#A9C5C2"
+CYAN_WASH = "#DDE8E2"
+AMBER = "#C9824A"
 
 
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+def clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
+    return max(low, min(high, value))
 
 
-@functools.lru_cache(maxsize=None)
-def image_data_uri(path: Path) -> str:
-    mime_type = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-    }.get(path.suffix.lower())
-    if mime_type is None:
-        raise ValueError(f"Unsupported embedded image type: {path.suffix}")
-    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
-    return f"data:{mime_type};base64,{encoded}"
+def smoothstep(start: float, end: float, value: float) -> float:
+    if start == end:
+        return float(value >= end)
+    position = clamp((value - start) / (end - start))
+    return position * position * (3.0 - 2.0 * position)
 
 
-def fetch_sources(source_dir: Path) -> dict[str, Path]:
-    source_dir.mkdir(parents=True, exist_ok=True)
-    paths: dict[str, Path] = {}
-    for name, (url, expected_hash) in SOURCES.items():
-        destination = source_dir / name
-        request = urllib.request.Request(
-            url,
-            headers={"User-Agent": "YuanKJing-README-asset-generator/1.0"},
-        )
-        last_error: Exception | None = None
-        for _ in range(3):
-            try:
-                with urllib.request.urlopen(request, timeout=180) as response:
-                    destination.write_bytes(response.read())
-                last_error = None
-                break
-            except (OSError, TimeoutError) as error:
-                last_error = error
-                destination.unlink(missing_ok=True)
-        if last_error is not None:
-            raise SystemExit(f"Unable to download {name}: {last_error}")
-        actual_hash = sha256(destination)
-        if actual_hash != expected_hash:
-            raise SystemExit(
-                f"Checksum mismatch for {name}: expected {expected_hash}, "
-                f"received {actual_hash}."
-            )
-        paths[name] = destination
-    return paths
+def phase(value: float, start: float, end: float) -> float:
+    return clamp((value - start) / (end - start))
 
 
-def load_local_sources(source_dir: Path) -> dict[str, Path]:
-    aliases = {"portrait.jpg": "avatar.jpg"}
-    paths: dict[str, Path] = {}
-    for name, (_, expected_hash) in SOURCES.items():
-        destination = source_dir / name
-        if not destination.exists() and name in aliases:
-            destination = source_dir / aliases[name]
-        if not destination.is_file():
-            raise SystemExit(f"Missing local source: {destination}")
-        actual_hash = sha256(destination)
-        if actual_hash != expected_hash:
-            raise SystemExit(
-                f"Checksum mismatch for {name}: expected {expected_hash}, "
-                f"received {actual_hash}."
-            )
-        paths[name] = destination
-    return paths
+def bell(value: float) -> float:
+    return math.sin(math.pi * clamp(value)) ** 2
 
 
-def extract_video_frames(ffmpeg: str, video: Path, frame_dir: Path) -> list[Path]:
-    frame_dir.mkdir(parents=True)
-    pattern = frame_dir / "frame-%03d.png"
-    subprocess.run(
-        [
-            ffmpeg,
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-ss",
-            str(VIDEO_START_SECONDS),
-            "-i",
-            str(video),
-            "-vf",
-            f"crop=540:444:0:205,fps={FRAME_RATE}",
-            "-frames:v",
-            str(FRAME_COUNT),
-            "-start_number",
-            "0",
-            str(pattern),
-        ],
-        check=True,
-    )
-    frames = sorted(frame_dir.glob("frame-*.png"))
-    if len(frames) != FRAME_COUNT:
-        raise SystemExit(f"Expected {FRAME_COUNT} video frames, found {len(frames)}.")
-    return frames
-
-
-def interpolate_polyline(
-    points: tuple[tuple[float, float], ...], progress: float
+def cubic_point(
+    start: tuple[float, float],
+    control_one: tuple[float, float],
+    control_two: tuple[float, float],
+    end: tuple[float, float],
+    progress: float,
 ) -> tuple[float, float]:
-    progress = max(0.0, min(1.0, progress))
-    lengths = [
-        math.dist(points[index], points[index + 1]) for index in range(len(points) - 1)
-    ]
-    target = progress * sum(lengths)
-    for index, length in enumerate(lengths):
-        if target <= length or index == len(lengths) - 1:
-            local = 0.0 if length == 0 else target / length
-            start_x, start_y = points[index]
-            end_x, end_y = points[index + 1]
-            return (
-                start_x + (end_x - start_x) * local,
-                start_y + (end_y - start_y) * local,
-            )
-        target -= length
-    return points[-1]
+    progress = clamp(progress)
+    inverse = 1.0 - progress
+    x = (
+        inverse**3 * start[0]
+        + 3.0 * inverse**2 * progress * control_one[0]
+        + 3.0 * inverse * progress**2 * control_two[0]
+        + progress**3 * end[0]
+    )
+    y = (
+        inverse**3 * start[1]
+        + 3.0 * inverse**2 * progress * control_one[1]
+        + 3.0 * inverse * progress**2 * control_two[1]
+        + progress**3 * end[1]
+    )
+    return x, y
 
 
-def common_defs(
-    theme: Theme,
-    portrait_clip: str,
-    study_clip: str,
-    robot_clip: str,
+def latent_nodes(center_x: float, center_y: float, scale: float) -> str:
+    nodes = (
+        (-48, -21, 3.2),
+        (-30, 20, 2.4),
+        (-12, -34, 2.7),
+        (2, 8, 3.5),
+        (21, -13, 2.6),
+        (36, 27, 3.0),
+        (50, -29, 2.2),
+        (59, 8, 2.8),
+        (-57, 12, 2.1),
+    )
+    markup = []
+    for index, (offset_x, offset_y, radius) in enumerate(nodes):
+        color = CYAN if index in {0, 3, 5, 7} else INK
+        opacity = 0.44 if index in {0, 3, 5, 7} else 0.22
+        markup.append(
+            f'<circle cx="{center_x + offset_x * scale:.2f}" '
+            f'cy="{center_y + offset_y * scale:.2f}" '
+            f'r="{radius * scale:.2f}" fill="{color}" '
+            f'fill-opacity="{opacity:.2f}"/>'
+        )
+    return "\n".join(markup)
+
+
+def packet_markup(
+    start: tuple[float, float],
+    control_one: tuple[float, float],
+    control_two: tuple[float, float],
+    end: tuple[float, float],
+    encode_progress: float,
+    scale: float,
 ) -> str:
-    return f"""
+    packets = []
+    for index in range(3):
+        local = clamp((encode_progress - index * 0.17) / 0.66)
+        opacity = bell(local)
+        x, y = cubic_point(start, control_one, control_two, end, local)
+        trail_x, trail_y = cubic_point(
+            start, control_one, control_two, end, max(0.0, local - 0.07)
+        )
+        packets.append(
+            f"""
+            <circle cx="{trail_x:.2f}" cy="{trail_y:.2f}" r="{2.2 * scale:.2f}"
+                    fill="{CYAN}" fill-opacity="{0.18 * opacity:.3f}"/>
+            <circle cx="{x:.2f}" cy="{y:.2f}" r="{3.4 * scale:.2f}"
+                    fill="{CYAN}" fill-opacity="{0.78 * opacity:.3f}"/>
+            """
+        )
+    return "".join(packets)
+
+
+def desktop_svg(frame: int) -> str:
+    width, height = 1200, 360
+    time = frame / (FRAME_COUNT - 1)
+
+    observe_progress = phase(time, 0.00, 0.20)
+    observe_opacity = bell(observe_progress)
+    scan_y = 132.0 + 66.0 * smoothstep(0.0, 1.0, observe_progress)
+
+    encode_progress = phase(time, 0.20, 0.39)
+    imagine_progress = phase(time, 0.38, 0.64)
+    imagine_motion = bell(imagine_progress)
+    ring_rotation = 8.0 * imagine_motion
+    ring_scale = 1.0 + 0.025 * imagine_motion
+
+    act_progress = phase(time, 0.63, 0.82)
+    act_opacity = bell(act_progress)
+    feedback_progress = phase(time, 0.81, 1.00)
+    feedback_opacity = bell(feedback_progress)
+    hand_shift = -3.0 * smoothstep(0.38, 0.92, act_progress)
+    hand_shift *= 1.0 - smoothstep(0.25, 0.95, feedback_progress)
+
+    sensor_left, sensor_top = 590.0, 126.0
+    sensor_right, sensor_mid = 710.0, 165.0
+    model_x, model_y = 842.0, 166.0
+
+    gripper = (1081.0 + hand_shift, 105.0)
+    action_start = (908.0, 166.0)
+    action_control_one = (962.0, 146.0)
+    action_control_two = (1018.0, 112.0)
+    token_x, token_y = cubic_point(
+        action_start,
+        action_control_one,
+        action_control_two,
+        gripper,
+        smoothstep(0.0, 1.0, act_progress),
+    )
+
+    feedback_start = (1090.0, 258.0)
+    feedback_end = (650.0, 257.0)
+    feedback_x, feedback_y = cubic_point(
+        feedback_start,
+        (990.0, 310.0),
+        (748.0, 310.0),
+        feedback_end,
+        smoothstep(0.0, 1.0, feedback_progress),
+    )
+
+    packets = packet_markup(
+        (sensor_right, sensor_mid),
+        (750.0, 163.0),
+        (780.0, 165.0),
+        (807.0, 166.0),
+        encode_progress,
+        1.0,
+    )
+
+    trajectory_opacity = 0.20 + 0.52 * max(imagine_motion, act_opacity)
+    active_dash = 88.0 * (1.0 - smoothstep(0.0, 1.0, imagine_progress))
+    joint_one = 0.25 + 0.65 * bell(clamp((act_progress - 0.05) / 0.55))
+    joint_two = 0.25 + 0.65 * bell(clamp((act_progress - 0.18) / 0.55))
+    joint_three = 0.25 + 0.65 * bell(clamp((act_progress - 0.30) / 0.55))
+
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"
+     viewBox="0 0 {width} {height}">
   <defs>
-    <clipPath id="portrait-clip">{portrait_clip}</clipPath>
-    <clipPath id="study-clip">{study_clip}</clipPath>
-    <clipPath id="robot-clip">{robot_clip}</clipPath>
-    <linearGradient id="robot-shade" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="{theme.background}" stop-opacity="0.03"/>
-      <stop offset="1" stop-color="{theme.background}" stop-opacity="0.42"/>
+    <linearGradient id="paper" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="{PAPER_HIGHLIGHT}"/>
+      <stop offset="58%" stop-color="{PAPER}"/>
+      <stop offset="100%" stop-color="#ECE9DF"/>
     </linearGradient>
-    <radialGradient id="pulse" cx="50%" cy="50%" r="50%">
-      <stop offset="0" stop-color="{theme.accent}" stop-opacity="0.88"/>
-      <stop offset="1" stop-color="{theme.accent}" stop-opacity="0"/>
+    <radialGradient id="wash" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="{CYAN_WASH}" stop-opacity="0.90"/>
+      <stop offset="100%" stop-color="{CYAN_WASH}" stop-opacity="0"/>
     </radialGradient>
   </defs>
-"""
 
+  <rect x="1" y="1" width="1198" height="358" rx="20"
+        fill="url(#paper)" stroke="{HAIRLINE}" stroke-opacity="0.48"/>
+  <circle cx="842" cy="166" r="128" fill="url(#wash)"/>
 
-def number_badge(x: float, y: float, label: str, theme: Theme) -> str:
-    return f"""
-  <g transform="translate({x} {y})">
-    <rect width="34" height="24" rx="12" fill="{theme.background}"
-          fill-opacity="0.92" stroke="{theme.border}"/>
-    <text x="17" y="16" text-anchor="middle" fill="{theme.ink}"
-          font-family="Avenir Next, Helvetica Neue, Arial, sans-serif"
-          font-size="10" font-weight="700" letter-spacing="0.8">{label}</text>
+  <g stroke="{INK}" stroke-opacity="0.035" stroke-width="1">
+    <path d="M548 72H1150 M548 126H1150 M548 180H1150 M548 234H1150 M548 288H1150"/>
   </g>
-"""
+  <path d="M516 48V312" stroke="{HAIRLINE}" stroke-opacity="0.38"/>
 
-
-def desktop_svg(
-    theme: Theme,
-    portrait: Path,
-    study_frames: tuple[Path, Path, Path],
-    video_frame: Path,
-    frame_index: int,
-) -> str:
-    width, height = 1200, 360
-    progress = frame_index / max(1, FRAME_COUNT - 1)
-    pulse_x, pulse_y = interpolate_polyline(
-        ((248, 292), (320, 292), (706, 292), (792, 292), (1132, 292)),
-        progress,
-    )
-    scan_y = 78 + 176 * (0.5 - 0.5 * math.cos(progress * math.pi))
-    portrait_uri = image_data_uri(portrait)
-    study_uris = tuple(image_data_uri(path) for path in study_frames)
-    video_uri = image_data_uri(video_frame)
-
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="{width}" height="{height}" viewBox="0 0 {width} {height}">
-{
-        common_defs(
-            theme,
-            '<rect x="36" y="36" width="238" height="288" rx="18"/>',
-            '<rect x="292" y="36" width="448" height="288" rx="18"/>',
-            '<rect x="758" y="36" width="406" height="288" rx="18"/>',
-        )
-    }
-  <rect x="1" y="1" width="1198" height="358" rx="24"
-        fill="{theme.background}" stroke="{theme.border}"/>
-
-  <g stroke="{theme.grid}" stroke-opacity="0.075" stroke-width="1">
-    <path d="M18 72H1182 M18 144H1182 M18 216H1182 M18 288H1182"/>
-    <path d="M120 18V342 M240 18V342 M360 18V342 M480 18V342
-             M600 18V342 M720 18V342 M840 18V342 M960 18V342 M1080 18V342"/>
+  <g font-family="Avenir Next, Helvetica Neue, sans-serif">
+    <text x="64" y="66" fill="{SECONDARY}" font-size="13" font-weight="600"
+          letter-spacing="2.2">RESEARCH MAP · EMBODIED INTELLIGENCE</text>
+    <text x="64" y="132" fill="{INK}" font-family="New York, Georgia, serif"
+          font-size="42" font-weight="500">World models for</text>
+    <text x="64" y="180" fill="{INK}" font-family="New York, Georgia, serif"
+          font-size="42" font-weight="500">embodied intelligence</text>
+    <text x="65" y="226" fill="{SECONDARY}" font-size="16">
+      Learning systems that observe, imagine, and act.
+    </text>
+    <text x="65" y="294" fill="{SECONDARY}" font-size="11.5" font-weight="600"
+          letter-spacing="1.15">PERCEPTION  /  LATENT DYNAMICS  /  ROBOT CONTROL</text>
+    <text x="1128" y="61" text-anchor="end" fill="{SECONDARY}" font-size="11"
+          letter-spacing="1.8">FIG. 01</text>
   </g>
 
-  <rect x="36" y="36" width="238" height="288" rx="18"
-        fill="{theme.surface}"/>
-  <image x="36" y="36" width="238" height="288"
-         preserveAspectRatio="xMidYMid slice" href="{portrait_uri}"
-         clip-path="url(#portrait-clip)"/>
-  <rect x="36" y="36" width="238" height="288" rx="18"
-        fill="{theme.image_overlay}" fill-opacity="{theme.image_overlay_opacity}"/>
-  <path d="M58 302H252" stroke="{theme.background}" stroke-opacity="0.72"/>
-  <rect x="36" y="36" width="238" height="288" rx="18"
-        fill="none" stroke="{theme.border}"/>
-  {number_badge(52, 52, "01", theme)}
-
-  <rect x="292" y="36" width="448" height="288" rx="18"
-        fill="{theme.surface}"/>
-  <image x="310" y="54" width="132" height="184"
-         preserveAspectRatio="xMinYMid slice" href="{study_uris[0]}"
-         clip-path="url(#study-clip)"/>
-  <image x="450" y="54" width="132" height="184"
-         preserveAspectRatio="xMidYMid slice" href="{study_uris[1]}"
-         clip-path="url(#study-clip)"/>
-  <image x="590" y="54" width="132" height="184"
-         preserveAspectRatio="xMaxYMid slice" href="{study_uris[2]}"
-         clip-path="url(#study-clip)"/>
-  <rect x="292" y="36" width="448" height="214" rx="18"
-        fill="{theme.image_overlay}" fill-opacity="{theme.image_overlay_opacity}"/>
-  <rect x="292" y="238" width="448" height="86"
-        fill="{theme.surface_strong}" clip-path="url(#study-clip)"/>
-  <g fill="none" stroke="{theme.grid}" stroke-opacity="0.40" stroke-width="1.2">
-    <path d="M326 281 C374 249 414 310 462 275 S550 257 594 282 S662 304 706 268"/>
-    <path d="M326 297H706" stroke-dasharray="3 7" stroke-opacity="0.24"/>
+  <!-- Observe -->
+  <g>
+    <rect x="{sensor_left}" y="{sensor_top}" width="120" height="78" rx="10"
+          fill="{PAPER_HIGHLIGHT}" fill-opacity="0.58"
+          stroke="{INK}" stroke-opacity="0.34"/>
+    <path d="M602 182 C620 169 635 173 650 159 C664 146 682 151 698 139"
+          fill="none" stroke="{HAIRLINE}" stroke-opacity="0.70" stroke-width="1.2"/>
+    <path d="M602 186H698" stroke="{HAIRLINE}" stroke-opacity="0.50"/>
+    <circle cx="620" cy="169" r="3.2" fill="{CYAN}"
+            fill-opacity="{0.28 + 0.58 * observe_opacity:.3f}"/>
+    <circle cx="652" cy="158" r="3.2" fill="{CYAN}"
+            fill-opacity="{0.28 + 0.50 * observe_opacity:.3f}"/>
+    <circle cx="681" cy="151" r="3.2" fill="{CYAN}"
+            fill-opacity="{0.28 + 0.42 * observe_opacity:.3f}"/>
+    <path d="M600 {scan_y:.2f}H700" stroke="{CYAN}" stroke-width="1.2"
+          stroke-opacity="{0.52 * observe_opacity:.3f}"/>
   </g>
-  <g fill="{theme.muted}">
-    <circle cx="326" cy="281" r="3"/><circle cx="391" cy="270" r="3"/>
-    <circle cx="462" cy="275" r="3"/><circle cx="528" cy="267" r="3"/>
-    <circle cx="594" cy="282" r="3"/><circle cx="652" cy="290" r="3"/>
-    <circle cx="706" cy="268" r="3"/>
+  <g font-family="Avenir Next, Helvetica Neue, sans-serif">
+    <text x="590" y="115" fill="{SECONDARY}" font-size="11" letter-spacing="1.3">01  OBSERVE</text>
+    <text x="650" y="222" text-anchor="middle" fill="{INK}" font-size="12" font-weight="600">SENSOR STATE</text>
   </g>
-  <rect x="292" y="36" width="448" height="288" rx="18"
-        fill="none" stroke="{theme.border}"/>
-  {number_badge(308, 52, "02", theme)}
 
-  <rect x="758" y="36" width="406" height="288" rx="18"
-        fill="{theme.surface}"/>
-  <image x="758" y="36" width="406" height="288"
-         preserveAspectRatio="xMidYMid slice" href="{video_uri}"
-         clip-path="url(#robot-clip)"/>
-  <rect x="758" y="36" width="406" height="288"
-        fill="url(#robot-shade)" clip-path="url(#robot-clip)"/>
-  <path d="M782 {scan_y:.1f}H1140" stroke="{theme.accent}"
-        stroke-opacity="0.28" stroke-width="1"/>
-  <path d="M801 58h-18v18 M1140 58h18v18 M801 302h-18v-18 M1140 302h18v-18"
-        fill="none" stroke="{theme.ink}" stroke-opacity="0.52" stroke-width="1.4"/>
-  <rect x="758" y="36" width="406" height="288" rx="18"
-        fill="none" stroke="{theme.border}"/>
-  {number_badge(774, 52, "03", theme)}
+  <!-- Encode -->
+  <path d="M710 165 C750 163 780 165 807 166" fill="none"
+        stroke="{HAIRLINE}" stroke-opacity="0.62" stroke-width="1.2"
+        stroke-dasharray="4 6"/>
+  {packets}
 
-  <path d="M248 292H320 C420 292 610 292 706 292 H792 C904 292 1030 292 1132 292"
-        fill="none" stroke="{theme.accent}" stroke-opacity="0.48"
-        stroke-width="1.5" stroke-dasharray="4 7"/>
-  <circle cx="248" cy="292" r="4" fill="{theme.accent}"/>
-  <circle cx="706" cy="292" r="4" fill="{theme.accent}"/>
-  <circle cx="1132" cy="292" r="4" fill="{theme.accent}"/>
-  <circle cx="{pulse_x:.1f}" cy="{pulse_y:.1f}" r="16" fill="url(#pulse)"/>
-  <circle cx="{pulse_x:.1f}" cy="{pulse_y:.1f}" r="3.5" fill="{theme.accent}"/>
+  <!-- Imagine -->
+  <g transform="translate({model_x} {model_y}) rotate({ring_rotation:.3f}) scale({ring_scale:.4f}) translate({-model_x} {-model_y})">
+    <ellipse cx="{model_x}" cy="{model_y}" rx="72" ry="56" fill="none"
+             stroke="{CYAN}" stroke-opacity="0.66" stroke-width="1.4"/>
+    <ellipse cx="{model_x}" cy="{model_y}" rx="44" ry="33" fill="none"
+             stroke="{INK}" stroke-opacity="0.32" stroke-width="1.2"
+             stroke-dasharray="6 7"/>
+    <path d="M776 178 C800 126 862 116 907 154 C874 205 818 219 776 178Z"
+          fill="{CYAN_WASH}" fill-opacity="0.30"
+          stroke="{HAIRLINE}" stroke-opacity="0.48"/>
+    {latent_nodes(model_x, model_y, 1.0)}
+  </g>
+  <g font-family="Avenir Next, Helvetica Neue, sans-serif">
+    <text x="842" y="86" text-anchor="middle" fill="{SECONDARY}" font-size="11"
+          letter-spacing="1.3">02  IMAGINE</text>
+    <text x="842" y="244" text-anchor="middle" fill="{INK}" font-size="12"
+          font-weight="600">WORLD MODEL</text>
+    <text x="842" y="260" text-anchor="middle" fill="{SECONDARY}" font-size="10.5">
+      latent dynamics
+    </text>
+  </g>
+
+  <!-- Candidate action trajectories -->
+  <path d="M908 166 C962 132 1026 92 {gripper[0]:.2f} {gripper[1]:.2f}"
+        fill="none" stroke="{INK}" stroke-opacity="0.11" stroke-width="1.2"/>
+  <path d="M908 166 C974 173 1030 145 {gripper[0]:.2f} {gripper[1]:.2f}"
+        fill="none" stroke="{INK}" stroke-opacity="0.08" stroke-width="1.2"/>
+  <path d="M908 166 C962 146 1018 112 {gripper[0]:.2f} {gripper[1]:.2f}"
+        fill="none" stroke="{AMBER}" stroke-opacity="{trajectory_opacity:.3f}"
+        stroke-width="1.7" stroke-dasharray="7 6" stroke-dashoffset="{active_dash:.2f}"/>
+  <circle cx="{token_x:.2f}" cy="{token_y:.2f}" r="4.6" fill="{AMBER}"
+          fill-opacity="{0.92 * act_opacity:.3f}"/>
+
+  <!-- Act: abstract robot arm -->
+  <g fill="none" stroke="{INK}" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1090 252 L1067 214 L1091 162 L1056 123 L{gripper[0]:.2f} {gripper[1]:.2f}"
+          stroke-width="2.2" stroke-opacity="0.70"/>
+    <path d="M1073 252H1107 M1078 258H1102" stroke-width="2" stroke-opacity="0.55"/>
+    <path d="M{gripper[0]:.2f} {gripper[1]:.2f} l18 -12 M{gripper[0]:.2f} {gripper[1]:.2f} l16 13"
+          stroke-width="2" stroke-opacity="0.75"/>
+    <rect x="1100" y="86" width="22" height="22" rx="3"
+          stroke="{AMBER}" stroke-opacity="0.62" stroke-width="1.4"/>
+  </g>
+  <g>
+    <circle cx="1067" cy="214" r="7" fill="{PAPER}" stroke="{INK}"
+            stroke-opacity="{joint_one:.3f}" stroke-width="2"/>
+    <circle cx="1091" cy="162" r="7" fill="{PAPER}" stroke="{INK}"
+            stroke-opacity="{joint_two:.3f}" stroke-width="2"/>
+    <circle cx="1056" cy="123" r="6" fill="{PAPER}" stroke="{INK}"
+            stroke-opacity="{joint_three:.3f}" stroke-width="2"/>
+    <circle cx="{gripper[0]:.2f}" cy="{gripper[1]:.2f}" r="4.5"
+            fill="{AMBER}" fill-opacity="{0.32 + 0.48 * act_opacity:.3f}"/>
+  </g>
+  <g font-family="Avenir Next, Helvetica Neue, sans-serif">
+    <text x="1032" y="86" fill="{SECONDARY}" font-size="11" letter-spacing="1.3">03  ACT</text>
+    <text x="1080" y="282" text-anchor="middle" fill="{INK}" font-size="12"
+          font-weight="600">ROBOT CONTROL</text>
+  </g>
+
+  <!-- Feedback -->
+  <path d="M1090 258 C990 310 748 310 650 257" fill="none"
+        stroke="{HAIRLINE}" stroke-opacity="0.62" stroke-width="1.2"/>
+  <circle cx="{feedback_x:.2f}" cy="{feedback_y:.2f}" r="3.8" fill="{CYAN}"
+          fill-opacity="{0.86 * feedback_opacity:.3f}"/>
+  <text x="869" y="315" text-anchor="middle" fill="{SECONDARY}"
+        font-family="Avenir Next, Helvetica Neue, sans-serif" font-size="10.5"
+        letter-spacing="0.8">closed-loop adaptation</text>
 </svg>
 """
 
 
-def mobile_svg(
-    theme: Theme,
-    portrait: Path,
-    study_frames: tuple[Path, Path, Path],
-    video_frame: Path,
-    frame_index: int,
-) -> str:
-    width, height = 720, 460
-    progress = frame_index / max(1, FRAME_COUNT - 1)
-    pulse_x, pulse_y = interpolate_polyline(
-        ((130, 195), (130, 236), (255, 344), (306, 344), (658, 344)),
-        progress,
+def mobile_svg(frame: int) -> str:
+    width, height = 720, 360
+    time = frame / (FRAME_COUNT - 1)
+
+    observe_progress = phase(time, 0.00, 0.20)
+    observe_opacity = bell(observe_progress)
+    scan_y = 183.0 + 49.0 * smoothstep(0.0, 1.0, observe_progress)
+    encode_progress = phase(time, 0.20, 0.39)
+    imagine_progress = phase(time, 0.38, 0.64)
+    imagine_motion = bell(imagine_progress)
+    act_progress = phase(time, 0.63, 0.82)
+    act_opacity = bell(act_progress)
+    feedback_progress = phase(time, 0.81, 1.00)
+    feedback_opacity = bell(feedback_progress)
+    hand_shift = -2.5 * smoothstep(0.38, 0.92, act_progress)
+    hand_shift *= 1.0 - smoothstep(0.25, 0.95, feedback_progress)
+
+    model_x, model_y = 360.0, 210.0
+    gripper = (627.0 + hand_shift, 169.0)
+    token_x, token_y = cubic_point(
+        (417.0, 210.0),
+        (480.0, 195.0),
+        (555.0, 168.0),
+        gripper,
+        smoothstep(0.0, 1.0, act_progress),
     )
-    scan_y = 74 + 252 * (0.5 - 0.5 * math.cos(progress * math.pi))
-    portrait_uri = image_data_uri(portrait)
-    study_uris = tuple(image_data_uri(path) for path in study_frames)
-    video_uri = image_data_uri(video_frame)
+    feedback_x, feedback_y = cubic_point(
+        (636.0, 283.0),
+        (520.0, 330.0),
+        (220.0, 330.0),
+        (105.0, 282.0),
+        smoothstep(0.0, 1.0, feedback_progress),
+    )
+    packets = packet_markup(
+        (224.0, 210.0),
+        (270.0, 207.0),
+        (298.0, 210.0),
+        (310.0, 210.0),
+        encode_progress,
+        0.9,
+    )
+    trajectory_opacity = 0.20 + 0.52 * max(imagine_motion, act_opacity)
 
     return f"""<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-     width="{width}" height="{height}" viewBox="0 0 {width} {height}">
-{
-        common_defs(
-            theme,
-            '<circle cx="130" cy="116" r="86"/>',
-            '<rect x="24" y="224" width="232" height="212" rx="18"/>',
-            '<rect x="274" y="24" width="422" height="412" rx="20"/>',
-        )
-    }
-  <rect x="1" y="1" width="718" height="458" rx="24"
-        fill="{theme.background}" stroke="{theme.border}"/>
-  <g stroke="{theme.grid}" stroke-opacity="0.075" stroke-width="1">
-    <path d="M18 92H702 M18 184H702 M18 276H702 M18 368H702"/>
-    <path d="M90 18V442 M180 18V442 M270 18V442 M360 18V442
-             M450 18V442 M540 18V442 M630 18V442"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}"
+     viewBox="0 0 {width} {height}">
+  <defs>
+    <linearGradient id="paper" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="{PAPER_HIGHLIGHT}"/>
+      <stop offset="65%" stop-color="{PAPER}"/>
+      <stop offset="100%" stop-color="#ECE9DF"/>
+    </linearGradient>
+    <radialGradient id="wash" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="{CYAN_WASH}" stop-opacity="0.90"/>
+      <stop offset="100%" stop-color="{CYAN_WASH}" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="1" y="1" width="718" height="358" rx="20"
+        fill="url(#paper)" stroke="{HAIRLINE}" stroke-opacity="0.48"/>
+  <g font-family="Avenir Next, Helvetica Neue, sans-serif">
+    <text x="40" y="47" fill="{SECONDARY}" font-size="11.5" font-weight="600"
+          letter-spacing="1.8">RESEARCH MAP · EMBODIED INTELLIGENCE</text>
+    <text x="40" y="91" fill="{INK}" font-family="New York, Georgia, serif"
+          font-size="31" font-weight="500">Observe, imagine, and act.</text>
+    <text x="40" y="119" fill="{SECONDARY}" font-size="14">
+      World models for embodied intelligence
+    </text>
+    <text x="680" y="47" text-anchor="end" fill="{SECONDARY}" font-size="10"
+          letter-spacing="1.4">FIG. 01</text>
+  </g>
+  <path d="M40 141H680" stroke="{HAIRLINE}" stroke-opacity="0.48"/>
+
+  <circle cx="{model_x}" cy="{model_y}" r="91" fill="url(#wash)"/>
+
+  <!-- Observe -->
+  <rect x="104" y="178" width="120" height="66" rx="10"
+        fill="{PAPER_HIGHLIGHT}" fill-opacity="0.60"
+        stroke="{INK}" stroke-opacity="0.34"/>
+  <path d="M115 229 C132 216 151 220 166 204 C183 189 199 196 214 186"
+        fill="none" stroke="{HAIRLINE}" stroke-opacity="0.72"/>
+  <circle cx="138" cy="215" r="3" fill="{CYAN}"
+          fill-opacity="{0.28 + 0.58 * observe_opacity:.3f}"/>
+  <circle cx="169" cy="202" r="3" fill="{CYAN}"
+          fill-opacity="{0.28 + 0.50 * observe_opacity:.3f}"/>
+  <circle cx="199" cy="195" r="3" fill="{CYAN}"
+          fill-opacity="{0.28 + 0.42 * observe_opacity:.3f}"/>
+  <path d="M113 {scan_y:.2f}H215" stroke="{CYAN}" stroke-width="1.2"
+        stroke-opacity="{0.52 * observe_opacity:.3f}"/>
+
+  <path d="M224 210 C270 207 298 210 310 210" fill="none"
+        stroke="{HAIRLINE}" stroke-opacity="0.62" stroke-dasharray="4 6"/>
+  {packets}
+
+  <!-- Imagine -->
+  <g transform="translate({model_x} {model_y}) rotate({7.0 * imagine_motion:.3f}) scale({1.0 + 0.025 * imagine_motion:.4f}) translate({-model_x} {-model_y})">
+    <ellipse cx="{model_x}" cy="{model_y}" rx="55" ry="45" fill="none"
+             stroke="{CYAN}" stroke-opacity="0.68" stroke-width="1.4"/>
+    <ellipse cx="{model_x}" cy="{model_y}" rx="34" ry="27" fill="none"
+             stroke="{INK}" stroke-opacity="0.34" stroke-dasharray="5 6"/>
+    {latent_nodes(model_x, model_y, 0.76)}
   </g>
 
-  <circle cx="130" cy="116" r="88" fill="{theme.surface}"/>
-  <image x="42" y="28" width="176" height="176"
-         preserveAspectRatio="xMidYMid slice" href="{portrait_uri}"
-         clip-path="url(#portrait-clip)"/>
-  <circle cx="130" cy="116" r="86" fill="{theme.image_overlay}"
-          fill-opacity="{theme.image_overlay_opacity}"/>
-  <circle cx="130" cy="116" r="87" fill="none" stroke="{theme.border}"/>
-  {number_badge(40, 40, "01", theme)}
+  <!-- Action path and arm -->
+  <path d="M417 210 C480 195 555 168 {gripper[0]:.2f} {gripper[1]:.2f}"
+        fill="none" stroke="{AMBER}" stroke-opacity="{trajectory_opacity:.3f}"
+        stroke-width="1.7" stroke-dasharray="7 6"/>
+  <path d="M417 210 C490 226 557 205 {gripper[0]:.2f} {gripper[1]:.2f}"
+        fill="none" stroke="{INK}" stroke-opacity="0.09"/>
+  <circle cx="{token_x:.2f}" cy="{token_y:.2f}" r="4.2" fill="{AMBER}"
+          fill-opacity="{0.92 * act_opacity:.3f}"/>
 
-  <rect x="24" y="224" width="232" height="212" rx="18"
-        fill="{theme.surface}"/>
-  <image x="38" y="240" width="64" height="106"
-         preserveAspectRatio="xMinYMid slice" href="{study_uris[0]}"
-         clip-path="url(#study-clip)"/>
-  <image x="108" y="240" width="64" height="106"
-         preserveAspectRatio="xMidYMid slice" href="{study_uris[1]}"
-         clip-path="url(#study-clip)"/>
-  <image x="178" y="240" width="64" height="106"
-         preserveAspectRatio="xMaxYMid slice" href="{study_uris[2]}"
-         clip-path="url(#study-clip)"/>
-  <rect x="24" y="224" width="232" height="132" rx="18"
-        fill="{theme.image_overlay}" fill-opacity="{theme.image_overlay_opacity}"/>
-  <rect x="24" y="350" width="232" height="86"
-        fill="{theme.surface_strong}" clip-path="url(#study-clip)"/>
-  <path d="M48 397 C83 370 112 414 146 387 S204 378 232 399"
-        fill="none" stroke="{theme.grid}" stroke-opacity="0.42" stroke-width="1.3"/>
-  <g fill="{theme.muted}">
-    <circle cx="48" cy="397" r="3"/><circle cx="92" cy="388" r="3"/>
-    <circle cx="146" cy="387" r="3"/><circle cx="191" cy="387" r="3"/>
-    <circle cx="232" cy="399" r="3"/>
+  <g fill="none" stroke="{INK}" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M636 283 L613 252 L640 215 L608 187 L{gripper[0]:.2f} {gripper[1]:.2f}"
+          stroke-width="2.2" stroke-opacity="0.70"/>
+    <path d="M620 283H652 M625 289H647" stroke-width="2" stroke-opacity="0.55"/>
+    <path d="M{gripper[0]:.2f} {gripper[1]:.2f} l15 -10 M{gripper[0]:.2f} {gripper[1]:.2f} l14 11"
+          stroke-width="2" stroke-opacity="0.76"/>
+    <rect x="645" y="151" width="19" height="19" rx="3"
+          stroke="{AMBER}" stroke-opacity="0.62" stroke-width="1.4"/>
   </g>
-  <rect x="24" y="224" width="232" height="212" rx="18"
-        fill="none" stroke="{theme.border}"/>
-  {number_badge(40, 240, "02", theme)}
+  <g fill="{PAPER}" stroke="{INK}" stroke-width="2">
+    <circle cx="613" cy="252" r="6"/>
+    <circle cx="640" cy="215" r="6"/>
+    <circle cx="608" cy="187" r="5.5"/>
+  </g>
+  <circle cx="{gripper[0]:.2f}" cy="{gripper[1]:.2f}" r="4.2" fill="{AMBER}"
+          fill-opacity="{0.32 + 0.48 * act_opacity:.3f}"/>
 
-  <rect x="274" y="24" width="422" height="412" rx="20"
-        fill="{theme.surface}"/>
-  <image x="274" y="24" width="422" height="412"
-         preserveAspectRatio="xMidYMid slice" href="{video_uri}"
-         clip-path="url(#robot-clip)"/>
-  <rect x="274" y="24" width="422" height="412"
-        fill="url(#robot-shade)" clip-path="url(#robot-clip)"/>
-  <path d="M298 {scan_y:.1f}H672" stroke="{theme.accent}"
-        stroke-opacity="0.28" stroke-width="1"/>
-  <path d="M302 52h-16v16 M668 52h16v16 M302 408h-16v-16 M668 408h16v-16"
-        fill="none" stroke="{theme.ink}" stroke-opacity="0.52" stroke-width="1.4"/>
-  <rect x="274" y="24" width="422" height="412" rx="20"
-        fill="none" stroke="{theme.border}"/>
-  {number_badge(290, 40, "03", theme)}
-
-  <path d="M130 195V236 C130 278 196 318 255 344 H306 C414 344 550 344 658 344"
-        fill="none" stroke="{theme.accent}" stroke-opacity="0.48"
-        stroke-width="1.5" stroke-dasharray="4 7"/>
-  <circle cx="130" cy="195" r="4" fill="{theme.accent}"/>
-  <circle cx="255" cy="344" r="4" fill="{theme.accent}"/>
-  <circle cx="658" cy="344" r="4" fill="{theme.accent}"/>
-  <circle cx="{pulse_x:.1f}" cy="{pulse_y:.1f}" r="16" fill="url(#pulse)"/>
-  <circle cx="{pulse_x:.1f}" cy="{pulse_y:.1f}" r="3.5" fill="{theme.accent}"/>
+  <!-- Labels and feedback -->
+  <g font-family="Avenir Next, Helvetica Neue, sans-serif">
+    <text x="164" y="270" text-anchor="middle" fill="{INK}" font-size="14"
+          font-weight="600">01 · Observe</text>
+    <text x="360" y="281" text-anchor="middle" fill="{INK}" font-size="14"
+          font-weight="600">02 · Imagine</text>
+    <text x="620" y="315" text-anchor="middle" fill="{INK}" font-size="14"
+          font-weight="600">03 · Act</text>
+  </g>
+  <path d="M636 283 C520 330 220 330 105 282" fill="none"
+        stroke="{HAIRLINE}" stroke-opacity="0.62" stroke-width="1.2"/>
+  <circle cx="{feedback_x:.2f}" cy="{feedback_y:.2f}" r="3.6" fill="{CYAN}"
+          fill-opacity="{0.86 * feedback_opacity:.3f}"/>
 </svg>
 """
 
 
-def render_variant(
-    renderer: str,
+def render_animation(
     magick: str,
+    renderer: str,
     temp: Path,
     name: str,
     svg_factory,
-    theme: Theme,
-    portrait: Path,
-    study_frames: tuple[Path, Path, Path],
-    video_frames: list[Path],
-    webp_output: Path,
-    poster_output: Path,
+    output: Path,
+    poster: Path,
 ) -> None:
-    variant_dir = temp / name
-    variant_dir.mkdir()
-    rendered_frames: list[Path] = []
+    frame_dir = temp / name
+    frame_dir.mkdir()
+    png_frames: list[Path] = []
 
-    for frame_index, video_frame in enumerate(video_frames):
-        svg_path = variant_dir / f"frame-{frame_index:03d}.svg"
-        png_path = variant_dir / f"frame-{frame_index:03d}.png"
-        svg_path.write_text(
-            svg_factory(theme, portrait, study_frames, video_frame, frame_index),
-            encoding="utf-8",
-        )
+    for frame in range(FRAME_COUNT):
+        svg_path = frame_dir / f"frame-{frame:03d}.svg"
+        png_path = frame_dir / f"frame-{frame:03d}.png"
+        svg_path.write_text(svg_factory(frame), encoding="utf-8")
         subprocess.run(
             [renderer, "--output", str(png_path), str(svg_path)],
             check=True,
         )
-        rendered_frames.append(png_path)
+        png_frames.append(png_path)
 
-    poster_svg = variant_dir / "poster.svg"
-    poster_svg.write_text(
-        svg_factory(
-            theme,
-            portrait,
-            study_frames,
-            video_frames[POSTER_SOURCE_FRAME],
-            FRAME_COUNT - 1,
-        ),
-        encoding="utf-8",
-    )
-    subprocess.run(
-        [renderer, "--output", str(poster_output), str(poster_svg)],
-        check=True,
-    )
+    shutil.copyfile(png_frames[0], poster)
     subprocess.run(
         [
             magick,
-            *map(str, rendered_frames),
+            *map(str, png_frames),
             "-set",
             "delay",
             str(FRAME_DELAY),
             "-loop",
-            "1",
-            "-quality",
-            "82",
-            "-define",
-            "webp:method=6",
-            "-define",
-            "webp:thread-level=1",
-            str(webp_output),
+            "0",
+            "-dither",
+            "None",
+            "-colors",
+            "88",
+            "-layers",
+            "Optimize",
+            str(output),
         ],
         check=True,
     )
+    optimized = frame_dir / f"{name}-optimized.gif"
+    subprocess.run(
+        [
+            magick,
+            str(output),
+            "-coalesce",
+            "-fuzz",
+            "2%",
+            "-layers",
+            "Optimize",
+            "-layers",
+            "OptimizeTransparency",
+            str(optimized),
+        ],
+        check=True,
+    )
+    shutil.move(optimized, output)
 
 
 def main() -> None:
-    ffmpeg = shutil.which("ffmpeg")
     magick = shutil.which("magick")
     renderer = shutil.which("rsvg-convert")
-    missing = [
-        name
-        for name, command in (
-            ("ffmpeg", ffmpeg),
-            ("ImageMagick", magick),
-            ("librsvg", renderer),
+    if magick is None:
+        raise SystemExit("ImageMagick is required: install it and rerun this script.")
+    if renderer is None:
+        raise SystemExit("librsvg is required: install rsvg-convert and rerun.")
+    if FONT is None:
+        raise SystemExit(
+            "No supported font was found. Install Avenir Next or DejaVu Sans."
         )
-        if command is None
-    ]
-    if missing:
-        raise SystemExit(f"Missing required tools: {', '.join(missing)}")
 
     ASSETS.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="research-field-log-") as temp_dir:
+    with tempfile.TemporaryDirectory(prefix="research-map-") as temp_dir:
         temp = Path(temp_dir)
-        source_override = os.environ.get("README_SOURCE_DIR")
-        sources = (
-            load_local_sources(Path(source_override))
-            if source_override
-            else fetch_sources(temp / "sources")
+        render_animation(
+            magick,
+            renderer,
+            temp,
+            "desktop",
+            desktop_svg,
+            ASSETS / "research-hero.gif",
+            ASSETS / "research-hero.png",
         )
-        video_frames = extract_video_frames(
-            ffmpeg,
-            sources["teleoperation.mp4"],
-            temp / "video-frames",
+        render_animation(
+            magick,
+            renderer,
+            temp,
+            "mobile",
+            mobile_svg,
+            ASSETS / "research-hero-mobile.gif",
+            ASSETS / "research-hero-mobile.png",
         )
-        study_frames = (
-            video_frames[0],
-            video_frames[POSTER_SOURCE_FRAME],
-            video_frames[-1],
-        )
-        variants = (
-            (
-                "desktop-light",
-                desktop_svg,
-                LIGHT,
-                ASSETS / "research-hero.webp",
-                ASSETS / "research-hero.png",
-            ),
-            (
-                "desktop-dark",
-                desktop_svg,
-                DARK,
-                ASSETS / "research-hero-dark.webp",
-                ASSETS / "research-hero-dark.png",
-            ),
-            (
-                "mobile-light",
-                mobile_svg,
-                LIGHT,
-                ASSETS / "research-hero-mobile.webp",
-                ASSETS / "research-hero-mobile.png",
-            ),
-            (
-                "mobile-dark",
-                mobile_svg,
-                DARK,
-                ASSETS / "research-hero-mobile-dark.webp",
-                ASSETS / "research-hero-mobile-dark.png",
-            ),
-        )
-        for (
-            name,
-            svg_factory,
-            theme,
-            webp_output,
-            poster_output,
-        ) in variants:
-            render_variant(
-                renderer,
-                magick,
-                temp,
-                name,
-                svg_factory,
-                theme,
-                sources["portrait.jpg"],
-                study_frames,
-                video_frames,
-                webp_output,
-                poster_output,
-            )
 
-    print("Generated theme-aware research field-log assets.")
+    print("Generated editorial research-map assets.")
 
 
 if __name__ == "__main__":

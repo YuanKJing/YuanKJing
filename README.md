@@ -21,44 +21,21 @@
 <p align="center">
   <picture>
     <source
-      media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark) and (max-width: 600px)"
-      srcset="./assets/research-hero-mobile-dark.png"
-    />
-    <source
       media="(prefers-reduced-motion: reduce) and (max-width: 600px)"
       srcset="./assets/research-hero-mobile.png"
-    />
-    <source
-      media="(prefers-reduced-motion: reduce) and (prefers-color-scheme: dark)"
-      srcset="./assets/research-hero-dark.png"
     />
     <source
       media="(prefers-reduced-motion: reduce)"
       srcset="./assets/research-hero.png"
     />
     <source
-      media="(prefers-color-scheme: dark) and (max-width: 600px)"
-      type="image/webp"
-      srcset="./assets/research-hero-mobile-dark.webp"
-    />
-    <source
       media="(max-width: 600px)"
-      type="image/webp"
-      srcset="./assets/research-hero-mobile.webp"
-    />
-    <source
-      media="(prefers-color-scheme: dark)"
-      type="image/webp"
-      srcset="./assets/research-hero-dark.webp"
-    />
-    <source
-      type="image/webp"
-      srcset="./assets/research-hero.webp"
+      srcset="./assets/research-hero-mobile.gif"
     />
     <img
-      src="./assets/research-hero.png"
+      src="./assets/research-hero.gif"
       width="100%"
-      alt="Research field log combining a portrait, multi-moment experiment frames, and real dual-arm teleoperation footage"
+      alt="Editorial research map connecting perception, latent world models, and robot control"
     />
   </picture>
 </p>
